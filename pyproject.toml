@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "domofon-capture"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = ["aiortc==1.16.0", "aioice==0.13.0", "av==19.0.2", "tinytuya==1.20.0", "Pillow==13.0.0", "pyOpenSSL==26.4.0", "cryptography==50.0.2"]
+
+[project.optional-dependencies]
+test = ["pytest>=8,<10"]
+mqtt = ["paho-mqtt==2.2.0"]
+
+[project.scripts]
+domofon-capture = "domofon_capture.cli:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

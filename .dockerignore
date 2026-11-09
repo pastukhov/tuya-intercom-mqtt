@@ -1,0 +1,8 @@
+**
+!Dockerfile
+!pyproject.toml
+!src/
+!src/domofon_capture/
+!src/domofon_capture/*.py
+**/__pycache__/
+**/*.pyc
