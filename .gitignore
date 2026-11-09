@@ -10,3 +10,4 @@
 /src/domofon_capture/*
 !/src/domofon_capture/*.py
 !/README.md
+!/src/domofon_capture/imm_sdk_license.txt

@@ -27,12 +27,23 @@ async def capture(frames, output, kind, resolution, duration=10, overwrite=False
   os.close(fd)
   temp = Path(temp_name)
   container = None
+  audio_stream = None
+  resampler = None
+  audio_pts = 0
   matched = False
   elapsed = 0
   first_time = previous_time = None
   deadline = asyncio.get_running_loop().time() + timeout
   try:
     async for frame in frames:
+      if isinstance(frame, av.AudioFrame):
+        if container is not None and audio_stream is not None:
+          for out in resampler.resample(frame):
+            out.pts = audio_pts
+            out.time_base = Fraction(1,48000)
+            audio_pts += out.samples
+            for packet in audio_stream.encode(out): container.mux(packet)
+        continue
       if (frame.width,frame.height) != SIZES[resolution]:
         if matched or asyncio.get_running_loop().time() >= deadline:
           raise CaptureError('Unsupported resolution: camera did not supply requested dimensions')
@@ -47,6 +58,9 @@ async def capture(frames, output, kind, resolution, duration=10, overwrite=False
       if first_time is None:
         first_time = timestamp
         container = av.open(str(temp), mode='w', format='mp4')
+        audio_stream = container.add_stream('aac', rate=48000)
+        audio_stream.layout = 'mono'
+        resampler = av.AudioResampler(format='fltp', layout='mono', rate=48000)
         stream = container.add_stream('libx264', rate=25)
         stream.width, stream.height = SIZES[resolution]
         stream.pix_fmt = 'yuv420p'
@@ -65,6 +79,8 @@ async def capture(frames, output, kind, resolution, duration=10, overwrite=False
       if elapsed >= duration:
         for packet in stream.encode():
           container.mux(packet)
+        if audio_stream is not None:
+          for packet in audio_stream.encode(): container.mux(packet)
         container.close()
         container = None
         break

@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 from .capture import capture, positive_finite, CaptureError
 from .config import load_config, ConfigError
-from .session import Session, SessionError
+from .session import media_session as Session, SessionError
 from .mqtt_service import MqttError
 
 
@@ -24,7 +24,7 @@ def parser():
   for name, ext in [('photo','.jpg'), ('video','.mp4')]:
     p = commands.add_parser(name)
     p.add_argument('--output', type=Path, required=True, help=f'Output {ext} file')
-    p.add_argument('--resolution', choices=['sd','hd'], default='sd')
+    p.add_argument('--resolution', choices=['sd','hd'], default='hd')
     p.add_argument('--timeout', type=positive, default=30, help='Startup timeout in seconds (default:30)')
     p.add_argument('--env-file', type=Path, default=Path('.env'))
     p.add_argument('--device-config', type=Path)

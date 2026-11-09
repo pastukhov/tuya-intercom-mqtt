@@ -18,3 +18,6 @@ domofon-capture = "domofon_capture.cli:main"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+
+[tool.setuptools.package-data]
+domofon_capture = ["imm_sdk_license.txt"]

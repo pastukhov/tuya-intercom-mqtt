@@ -6,3 +6,4 @@
 !src/domofon_capture/*.py
 **/__pycache__/
 **/*.pyc
+!src/domofon_capture/imm_sdk_license.txt

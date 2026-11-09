@@ -199,3 +199,10 @@ class Session:
           await asyncio.wait_for(self.writer.wait_closed(), 1)
         except Exception:
           pass
+
+
+def media_session(config, resolution='hd', timeout=30):
+    if getattr(config, 'imm_auth', ''):
+        from .imm import IMMSession
+        return IMMSession(config)
+    return Session(config, resolution, timeout)

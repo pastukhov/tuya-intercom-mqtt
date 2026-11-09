@@ -15,7 +15,7 @@ from collections import OrderedDict
 from dataclasses import dataclass, field
 from pathlib import Path
 from .capture import capture
-from .session import Session
+from .session import media_session as Session
 from .source import TuyaSource
 
 class MqttError(RuntimeError):
@@ -167,7 +167,7 @@ class MqttService:
     self.publish(self.event_topic,{'event_type':'snapshot_unavailable','source':self.source_id,'event_id':payload['event_id'],'reason':reason})
   def capture_photo(self):
     async def run():
-      session = Session(self.config,'sd',30)
+      session = Session(self.config,'hd' if self.config.imm_auth else 'sd',30)
       closed = False
       async def shutdown():
         nonlocal closed
@@ -176,7 +176,7 @@ class MqttService:
       with tempfile.TemporaryDirectory(prefix='domofon-mqtt-') as directory:
         output = Path(directory)/'photo.jpg'
         try:
-          await capture(session.frames(),output,'photo','sd',before_publish=shutdown)
+          await capture(session.frames(),output,'photo','hd' if self.config.imm_auth else 'sd',before_publish=shutdown)
           return output.read_bytes()
         finally:
           if not closed:

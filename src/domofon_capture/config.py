@@ -14,6 +14,7 @@ class Config:
   ip: str
   local_key: str
   rtc_auth: str
+  imm_auth: str = ""
 
   def __repr__(self):
     return 'Config(<redacted>)'
@@ -37,12 +38,15 @@ def load_config(env_file=Path('.env'), device_config=None, environ=None):
         values[name.strip()] = value.strip().strip('\"\'')
     values.update(os.environ if environ is None else environ)
     fields = [values.get('TUYA_' + k, '') for k in ('DEVICE_ID','DEVICE_IP','LOCAL_KEY','RTC_AUTH')]
-    if any(not isinstance(v, str) or not v.strip() for v in fields):
-      raise ConfigError('Missing required TUYA_DEVICE_ID, TUYA_DEVICE_IP, TUYA_LOCAL_KEY or TUYA_RTC_AUTH')
+    imm = values.get('TUYA_IMM_AUTH', '')
+    if imm and (len(imm)!=32 or any(c not in '0123456789abcdefABCDEF' for c in imm)):
+      raise ConfigError('TUYA_IMM_AUTH must be 32 hexadecimal characters')
+    if any(not isinstance(v, str) or not v.strip() for v in fields[:3]) or not (fields[3] or imm):
+      raise ConfigError('Require TUYA_DEVICE_ID, TUYA_DEVICE_IP, TUYA_LOCAL_KEY and TUYA_IMM_AUTH or TUYA_RTC_AUTH')
     ipaddress.IPv4Address(fields[1])
     if len(fields[2].encode()) != 16:
       raise ConfigError('TUYA_LOCAL_KEY must be exactly 16 bytes')
-    return Config(*fields)
+    return Config(*fields, imm)
   except ConfigError:
     raise
   except (OSError, ValueError, TypeError, AttributeError):
