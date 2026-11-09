@@ -38,6 +38,14 @@ def env_values(path=None):
   values.update(os.environ)
   return values
 
+def render_topic(template, source):
+  topic = template.replace('{source}', source).replace('+', source)
+  if (not topic or any(c in topic for c in '+#\x00{}')
+      or topic.startswith('/') or topic.endswith('/') or '//' in topic
+      or len(topic.encode('utf-8')) > 65535):
+    raise ValueError('Invalid MQTT topic template')
+  return topic
+
 @dataclass(frozen=True)
 class BrokerConfig:
   host: str
@@ -47,18 +55,24 @@ class BrokerConfig:
   username: str = field(default='', repr=False)
   password: str = field(default='', repr=False)
   tls: bool = False
+  event_template: str = "domofon/{source}/event"
+  status_template: str = "domofon/{source}/status"
 
   @classmethod
   def load(cls, path=None, prefix=''):
     values = env_values(path)
     host = values.get('MQTT_HOST', '')
     port = int(values.get('MQTT_PORT','1883'))
-    template = values.get('MQTT_TOPIC_IN','yaic/input/+/image')
-    if not host or not 1 <= port <= 65535 or template.split('/').count('+') != 1 or '#' in template:
+    template = values.get('MQTT_TOPIC_IMAGE', values.get('MQTT_TOPIC_IN','yaic/input/+/image'))
+    event = values.get('MQTT_TOPIC_EVENT', 'domofon/{source}/event')
+    status = values.get('MQTT_TOPIC_STATUS', 'domofon/{source}/status')
+    prefix = prefix or values.get('MQTT_TOPIC_PREFIX', '')
+    for item in (template,event,status): render_topic(item, 'device')
+    if not host or not 1 <= port <= 65535:
       raise ValueError('Invalid MQTT host, port or input template')
     if any(c in prefix for c in '+#\x00') or prefix.startswith('/') or prefix.endswith('/'):
       raise ValueError('Invalid MQTT topic prefix')
-    return cls(host,port,prefix,template,values.get('MQTT_USERNAME',''),values.get('MQTT_PASSWORD',''),values.get('MQTT_TLS','false').lower()=='true')
+    return cls(host,port,prefix,template,values.get('MQTT_USERNAME',''),values.get('MQTT_PASSWORD',''),values.get('MQTT_TLS','false').lower()=='true',event,status)
 
 class Publisher:
   def __init__(self, broker, status_topic):
@@ -124,9 +138,11 @@ class MqttService:
       raise ValueError('Invalid source ID')
     self.config, self.source_id, self.broker = config,source_id,broker
     root = broker.prefix + '/' if broker.prefix else ''
-    self.event_topic = root + f'domofon/{source_id}/event'
-    self.status_topic = root + f'domofon/{source_id}/status'
-    self.image_topic = root + broker.image_template.replace('+',source_id)
+    self.event_topic = render_topic(root + broker.event_template,source_id)
+    self.status_topic = render_topic(root + broker.status_template,source_id)
+    self.image_topic = render_topic(root + broker.image_template,source_id)
+    if len({self.event_topic,self.status_topic,self.image_topic}) != 3:
+      raise ValueError('MQTT event, status and image topics must differ')
     self.publisher = publisher or Publisher(broker,self.status_topic)
     self.capture = capture or self.capture_photo
     self.clock = clock

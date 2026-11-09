@@ -298,13 +298,47 @@ original `event_id` and a reason: `capture_failed`, `queue_full`,
 `snapshot_job_expired` or `shutdown`. The queue holds eight jobs; jobs waiting
 longer than five seconds are discarded.
 
-`MQTT_TOPIC_IN` must contain exactly one `+` path segment and no `#`.
+`MQTT_TOPIC_IN` supports `+`, `{source}` or a fixed topic; `#` is forbidden.
 The source ID replaces `+`. Its default is `yaic/input/+/image` for YAIC
 compatibility; despite `IN`, this is the bridge's output topic. YAIC is optional.
 
 `--mqtt-topic-prefix home` prepends `home/` to all bridge topics. Do not include
 leading/trailing slashes or wildcards in the prefix. To test, subscribe to
 `domofon/entrance/#` and `intercom/entrance/image`, then ring the panel.
+
+### Topic configuration
+
+Configure each outgoing topic independently through the environment:
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `MQTT_TOPIC_EVENT` | `domofon/{source}/event` | Rings, human detection and snapshot failures |
+| `MQTT_TOPIC_STATUS` | `domofon/{source}/status` | Retained availability and Last Will |
+| `MQTT_TOPIC_IMAGE` | `yaic/input/+/image` | JSON containing a Base64 JPEG |
+| `MQTT_TOPIC_PREFIX` | empty | Prefix applied to all three topics |
+
+`{source}` expands to `--source-id`. Fixed topics without a placeholder are
+supported. Legacy `+` also expands to the source ID; it is not a subscription
+wildcard. `MQTT_TOPIC_IMAGE` overrides legacy `MQTT_TOPIC_IN`. The CLI option
+`--mqtt-topic-prefix` overrides `MQTT_TOPIC_PREFIX`. Prefixes apply to fixed topics too.
+
+Example `bridge.env`:
+
+```dotenv
+MQTT_TOPIC_PREFIX=home
+MQTT_TOPIC_EVENT=intercom/{source}/events
+MQTT_TOPIC_STATUS=intercom/{source}/availability
+MQTT_TOPIC_IMAGE=intercom/{source}/snapshot
+```
+
+With `--source-id entrance`, the resulting topics are
+`home/intercom/entrance/events`, `home/intercom/entrance/availability` and
+`home/intercom/entrance/snapshot`. Payloads, QoS 1 and retain behavior are unchanged.
+The three resolved topics must differ. Empty topics, `#`, unknown placeholders,
+NUL, empty segments and leading/trailing slashes are rejected.
+Changing the status topic does not remove the broker's old retained message;
+clear it with your MQTT client if needed. Update broker ACLs and consumer
+subscriptions, then recreate the container to reload its env file.
 
 ## Other modes
 
