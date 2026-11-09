@@ -417,3 +417,49 @@ control the image; `pyproject.toml` defines dependencies and the console command
 The adapted IMM helpers include their MIT attribution in `imm_sdk_license.txt`.
 Private captures, research scripts and third-party checkouts are excluded.
 `.gitignore` allows an explicit list of published files; update it when adding files.
+
+## YAIC compatibility
+
+Add these settings to the bridge environment:
+
+```dotenv
+MQTT_TOPIC_IMAGE=yaic/input/{source}/image
+MQTT_TOPIC_EVENT=intercom/{source}/event
+MQTT_TOPIC_STATUS=intercom/{source}/bridge/status
+MQTT_STATUS_FORMAT=text
+```
+
+Use a separate environment for YAIC:
+
+```dotenv
+MQTT_TOPIC_IN=yaic/input/+/image
+MQTT_TOPIC_OUT=yaic/output/classification
+MQTT_TOPIC_STATUS=yaic/status
+```
+
+Configure YAIC's other required settings, including model, language and logging,
+according to its documentation. Leave the bridge topic prefix empty.
+The image JSON already matches YAIC: string `image_b64` (Base64 JPEG), string
+`device` (source ID), and string `event_id`. No conversion is required.
+YAIC derives source identity from the topic segment, not the device field.
+
+Bridge availability is `intercom/entrance/bridge/status`; YAIC availability is
+`yaic/status/entrance`, and operation status is `yaic/status/entrance/operation`.
+Keep these distinct: YAIC can overwrite source availability with its own online.
+`MQTT_STATUS_FORMAT=text` publishes literal unquoted online/offline at startup,
+shutdown and in the Last Will. The legacy default is `json`. Both use retained
+QoS 1. Bridge status indicates MQTT connectivity, not camera health. YAIC has
+no Last Will, so its retained online can become stale after a crash.
+
+Bridge events contain `timestamp`, the UTC ISO 8601 receive time, with the equal
+legacy alias `received_at`. Optional numeric `device_timestamp` is separate.
+Snapshot failure timestamps represent failure time. Event/image correlation uses
+`event_id`. The current local YAIC working tree preserves it in classification
+results, but YAIC's committed HEAD does not yet include that support. Its HA
+classified event also omits event_id. Classification uses the shared output
+`yaic/output/classification`; HA images use `yaic/image/{source}/last` and HA
+events use `yaic/event/{source}`.
+
+Recreate containers after changing settings and clear old retained status
+messages where appropriate. Contract checks do not establish live camera or
+external VLM operation.

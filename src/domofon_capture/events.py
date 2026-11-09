@@ -24,7 +24,7 @@ class TuyaEvent:
     dedup_key: str = field(default='', repr=False)
 
     def to_payload(self) -> dict:
-        result = {'event_type': self.kind, 'source': self.source_id, 'received_at': self.received_at}
+        result = {'event_type': self.kind, 'source': self.source_id, 'received_at': self.received_at, 'timestamp': self.received_at}
         if self.panel is not None:
             result['panel'] = self.panel
         if self.device_timestamp is not None:

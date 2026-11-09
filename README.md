@@ -438,3 +438,50 @@ Tuya, а `--mqtt-env-file` — брокера. `--env-file` не экспорт�
 устройство закрыло LAN-сигнализацию до начала медиа. Предыдущая реализация
 этого транспорта в Tuya Local была проверена на настоящем устройстве; это
 не заменяет проверку нового Docker-моста в вашей сети.
+
+## Совместимость с YAIC
+
+Рекомендуемая конфигурация моста (добавьте в его env-файл):
+
+```dotenv
+MQTT_TOPIC_IMAGE=yaic/input/{source}/image
+MQTT_TOPIC_EVENT=intercom/{source}/event
+MQTT_TOPIC_STATUS=intercom/{source}/bridge/status
+MQTT_STATUS_FORMAT=text
+```
+
+В отдельном окружении YAIC задайте:
+
+```dotenv
+MQTT_TOPIC_IN=yaic/input/+/image
+MQTT_TOPIC_OUT=yaic/output/classification
+MQTT_TOPIC_STATUS=yaic/status
+```
+
+Остальные обязательные настройки YAIC, включая модель, язык и логирование,
+задаются по его инструкции. В мосте оставьте `MQTT_TOPIC_PREFIX` пустым.
+Снимок уже имеет принимаемый YAIC JSON: `image_b64` (строка Base64 JPEG),
+`device` (строка source ID), `event_id` (строка). Дополнительный конвертер не нужен.
+Source YAIC определяется из сегмента входного топика, а не из `device`.
+
+Статус моста идёт в `intercom/entrance/bridge/status`, статус YAIC — в
+`yaic/status/entrance`; состояние обработки — в `yaic/status/entrance/operation`.
+Не объединяйте их: YAIC может перезаписать статус источника своим `online`.
+`MQTT_STATUS_FORMAT=text` передаёт буквальные `online`/`offline` без JSON-кавычек
+при старте, завершении и в Last Will. По умолчанию сохранён старый `json`.
+Оба режима retained, QoS 1. Статус моста отражает MQTT, а не доступность камеры;
+у YAIC нет Last Will, поэтому после аварии retained online может устареть.
+
+События моста содержат `timestamp` — UTC ISO 8601 время получения;
+`received_at` временно сохранён как равный ему совместимый псевдоним.
+`device_timestamp`, если есть, — отдельное числовое время устройства.
+Ошибка `snapshot_unavailable` содержит timestamp времени ошибки.
+Идентификатор `event_id` связывает событие и снимок. В локальной версии YAIC
+он сохраняется в результате классификации; в его текущем Git HEAD эта поддержка
+ещё отсутствует. HA-событие `classified` YAIC также не переносит event_id.
+Результаты YAIC идут в общий `yaic/output/classification`, HA-изображения — в
+`yaic/image/{source}/last`, HA-события — в `yaic/event/{source}`.
+
+После изменения настроек пересоздайте контейнеры и при необходимости удалите
+старые retained-статусы. Совместимость проверяется отдельно от живой камеры
+и реального VLM-запроса.

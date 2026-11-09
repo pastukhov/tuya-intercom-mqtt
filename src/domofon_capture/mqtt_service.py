@@ -13,6 +13,7 @@ import time
 import uuid
 from collections import OrderedDict
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from .capture import capture
 from .session import media_session as Session
@@ -57,6 +58,7 @@ class BrokerConfig:
   tls: bool = False
   event_template: str = "domofon/{source}/event"
   status_template: str = "domofon/{source}/status"
+  status_format: str = "json"
 
   @classmethod
   def load(cls, path=None, prefix=''):
@@ -72,7 +74,13 @@ class BrokerConfig:
       raise ValueError('Invalid MQTT host, port or input template')
     if any(c in prefix for c in '+#\x00') or prefix.startswith('/') or prefix.endswith('/'):
       raise ValueError('Invalid MQTT topic prefix')
-    return cls(host,port,prefix,template,values.get('MQTT_USERNAME',''),values.get('MQTT_PASSWORD',''),values.get('MQTT_TLS','false').lower()=='true',event,status)
+    status_format = values.get('MQTT_STATUS_FORMAT','json')
+    if status_format not in ('json','text'):
+      raise ValueError('MQTT_STATUS_FORMAT must be json or text')
+    return cls(host,port,prefix,template,values.get('MQTT_USERNAME',''),values.get('MQTT_PASSWORD',''),values.get('MQTT_TLS','false').lower()=='true',event,status,status_format)
+
+def status_payload(broker, status):
+  return status if broker.status_format == 'text' else json.dumps({'status':status},separators=(',',':'))
 
 class Publisher:
   def __init__(self, broker, status_topic):
@@ -91,7 +99,7 @@ class Publisher:
       self.client.username_pw_set(broker.username,broker.password)
     if broker.tls:
       self.client.tls_set_context(ssl.create_default_context())
-    self.client.will_set(status_topic,json.dumps({'status':'offline'}),qos=1,retain=True)
+    self.client.will_set(status_topic,status_payload(broker,'offline'),qos=1,retain=True)
     def connected(client,userdata,flags,reason,properties):
       self.connected = not reason.is_failure and not self.failed
       self.ready.set()
@@ -180,7 +188,7 @@ class MqttService:
     except queue.Full:
       self.unavailable(payload,'queue_full')
   def unavailable(self, payload, reason):
-    self.publish(self.event_topic,{'event_type':'snapshot_unavailable','source':self.source_id,'event_id':payload['event_id'],'reason':reason})
+    self.publish(self.event_topic,{'event_type':'snapshot_unavailable','source':self.source_id,'event_id':payload['event_id'],'reason':reason,'timestamp':datetime.now(timezone.utc).isoformat()})
   def capture_photo(self):
     async def run():
       session = Session(self.config,'hd' if self.config.imm_auth else 'sd',30)
@@ -232,7 +240,7 @@ class MqttService:
     self.publisher.start()
     worker = threading.Thread(target=self.worker,name='domofon-capture',daemon=True)
     try:
-      self.publish(self.status_topic,{'status':'online'},retain=True)
+      self.publisher.publish(self.status_topic,status_payload(self.broker,'online'),retain=True)
       worker.start()
       listener = listener or TuyaSource({'id':self.config.device_id,'ip':self.config.ip,'local_key':self.config.local_key},self.source_id)
       listener.run(self.on_event,self.stop)
@@ -242,7 +250,7 @@ class MqttService:
         self.jobs.put(None)
         worker.join(timeout=50)
       try:
-        self.publish(self.status_topic,{'status':'offline'},retain=True)
+        self.publisher.publish(self.status_topic,status_payload(self.broker,'offline'),retain=True)
       except Exception:
         pass
       self.publisher.close()
